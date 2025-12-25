@@ -12,5 +12,3 @@ __pycache__/
 
 # ML models (large files)
 *.pth
-*.pt
-models/
