@@ -2,54 +2,39 @@ import torch
 import torch.nn as nn
 import timm
 
-NUM_CLASSES = 6
 
-class BEiTWithXP5Head(nn.Module):
-    def __init__(self):
+class XP5Head(nn.Module):
+    def __init__(self, embed_dim, num_classes=6):
         super().__init__()
-
-        # BEiT backbone WITHOUT classifier
-        self.backbone = timm.create_model(
-            "beit_base_patch16_384",
-            pretrained=False,
-            num_classes=0
-        )
-
-        self.layer_norm = nn.LayerNorm(self.backbone.num_features)
-        self.classifier = nn.Linear(self.backbone.num_features, NUM_CLASSES)
+        self.layer_norm = nn.LayerNorm(embed_dim)
+        self.linear_classif = nn.Linear(embed_dim, num_classes)
 
     def forward(self, x):
-        features = self.backbone(x)   # (B, D)
-        features = self.layer_norm(features)
-        return self.classifier(features)
+        x = self.layer_norm(x)
+        x = self.linear_classif(x)
+        return x
 
 
-def load_model(beit_path, xp5_head_path, device="cpu"):
-    model = BEiTWithXP5Head().to(device)
+def load_model(backbone_path, head_path, device):
+    backbone = timm.create_model(
+        "beit_base_patch16_384",
+        pretrained=False,
+        num_classes=0
+    )
 
-    # -------- Load BEiT backbone weights (REMOVE HEAD) --------
-    beit_ckpt = torch.load(beit_path, map_location=device)
+    backbone.load_state_dict(
+        torch.load(backbone_path, map_location="cpu"),
+        strict=False
+    )
 
-    # Remove original head weights if present
-    beit_ckpt = {
-        k: v for k, v in beit_ckpt.items()
-        if not k.startswith("head.")
-    }
+    head = XP5Head(backbone.num_features, 6)
+    head.load_state_dict(
+        torch.load(head_path, map_location="cpu"),
+        strict=True
+    )
 
-    model.backbone.load_state_dict(beit_ckpt, strict=True)
-
-    # -------- Load XP5 classifier head --------
-    xp5_ckpt = torch.load(xp5_head_path, map_location=device)
-
-    model.layer_norm.load_state_dict({
-        "weight": xp5_ckpt["layer_norm.weight"],
-        "bias": xp5_ckpt["layer_norm.bias"],
-    })
-
-    model.classifier.load_state_dict({
-        "weight": xp5_ckpt["linear_classif.weight"],
-        "bias": xp5_ckpt["linear_classif.bias"],
-    })
-
+    model = nn.Sequential(backbone, head)
+    model.to(device)
     model.eval()
+
     return model
