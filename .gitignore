@@ -12,3 +12,14 @@ __pycache__/
 
 # ML models (large files)
 *.pth
+
+# Sample images
+*.jpg
+*.jpeg
+*.png
+
+# Sample videos
+*.mp4
+
+*.csv
+*.jsonl
